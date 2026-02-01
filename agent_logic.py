@@ -197,10 +197,18 @@ async def _search_semantic_memory(context, query: str, user_id: str, limit: int 
 @weave.op()
 async def _extract_facts_from_message(message: str, conversation_history: List[Dict]) -> List[str]:
     history_context = _format_conversation_history(conversation_history[-5:])
-    prompt = f"""Analyze the user message and extract facts to remember.
+    prompt = f"""Analyze the user message and extract new objective facts to remember.
+
+INSTRUCTIONS:
+1. Extract ONLY information about the world, entities, or relationships.
+2. DO NOT include what the user is doing, asking, or inquiring about (e.g., exclude "user is asking about...", "user wants to know...").
+3. Focus on facts that are likely to be useful for future reference.
+4. If no new facts are found, return nothing.
+
 CONTEXT: {history_context}
 MESSAGE: {message}
-Return ONLY facts, one per line."""
+
+Return ONLY the facts, one per line. If no facts, return 'NONE'."""
     try:
         response = completion(
             model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
