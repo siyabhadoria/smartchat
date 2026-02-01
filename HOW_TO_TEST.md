@@ -34,16 +34,22 @@ soorma dev --build
 You'll need **3 terminals**:
 
 - **Terminal 1:** Platform services (`soorma dev --build`)
-- **Terminal 2:** Chat agent worker (`python worker.py`)
-- **Terminal 3:** Client (send messages)
+- **Terminal 2:** Chat agent worker (`sh start.sh`)
+- **Terminal 3:** Web server (`sh start_web.sh`)
 
 ### Start the Agent
 
 **Terminal 2:**
 ```bash
-cd chat-memory-agent
-python worker.py
+sh start.sh
 ```
+
+**Terminal 3:**
+```bash
+sh start_web.sh
+```
+
+Access the UI at: `http://localhost:5000`
 
 You should see:
 ```
@@ -51,86 +57,45 @@ You should see:
    ✓ LLM configured: gpt-4o-mini
 ```
 
-## Test Scenarios
+## Test Scenarios (Web UI)
 
-### Test 1: Basic Message
+### Test 1: Enhanced Reasoning Explanation
 
-**Terminal 3:**
-```bash
-cd chat-memory-agent
-python client.py "Hello, how are you?"
-```
+1.  Open `http://localhost:5000`.
+2.  Send a message: "My name is Alice and I work at Google."
+3.  Click the **Explain why I said that** button or type "Why did you say that?".
+4.  **Expected Outcome**: 
+    - A structured "Reasoning Explanation" appears.
+    - **Episodic Memories**: Shows your previous message.
+    - **Semantic Knowledge**: Shows extracted facts like "User's name is Alice".
+    - **Prompt Composition**: Shows the LLM instructions.
 
-**What to expect:**
-- Client sends message
-- Worker receives, stores in memory, generates LLM reply
-- Client receives structured reply
+### Test 2: Self-Improving Feedback Loop
 
-**Check Terminal 2** - you should see:
-```
-📨 Received chat message
-   💾 Storing message in episodic memory...
-   ✓ Message stored
-   🔍 Retrieving conversation history...
-   ✓ Found 0 previous interactions
-   🤖 Generating reply with LLM...
-   ✓ Reply generated
-   💾 Storing reply in episodic memory...
-   ✅ Reply published
-```
-
-### Test 2: Multi-Turn Conversation
-
-**Step 1 - Send first message:**
-```bash
-python client.py "My name is Alice and I love Python programming"
-```
-
-**Copy the `Conversation ID` from the output!**
-
-**Step 2 - Send follow-up (use the conversation_id):**
-```bash
-python client.py "What's my name?" "<paste-conversation-id-here>"
-```
-
-**Expected:** Agent should remember your name!
-
-**Step 3 - Continue conversation:**
-```bash
-python client.py "What programming language do I like?" "<same-conversation-id>"
-```
-
-**Expected:** Agent should remember you like Python!
-
-**Check Terminal 2** - you should see:
-```
-✓ Found 2 previous interactions  # After step 2
-✓ Found 4 previous interactions  # After step 3
-```
+1.  Ask a question that retrieves a fact: "What is my job?".
+2.  The agent should answer correctly ("You work at Google").
+3.  Click the **👎 (Thumbs Down)** button on the response.
+4.  **Verify Backend**: The worker terminal should show `✓ Feedback logged` and `✓ Injected system correction`.
+5.  **Test Improvement**:
+    - Ask "What is my job?" again.
+    - Ask "Why did you say that?".
+    - **Expected Outcome**:
+        - You should see a `System` message in the Episodic History: `[SYSTEM]: User marked the previous response...`.
+        - The agent should acknowledge the error or prioritize different information.
 
 ### Test 3: Separate Conversations
 
-**Terminal 3:**
+1.  Click **New Conversation** in the UI.
+2.  Ask "What is my name?".
+3.  **Expected Outcome**: The agent should NOT remember Alice's name (new episodic context), though it might still retrieve it from semantic memory if the same `user_id` is used.
+
+## CLI Testing (Optional)
+
+You can still use `python client.py` for raw event testing:
+
 ```bash
-python client.py "I'm Alice, a software engineer" "conv-alice"
+python client.py "Hello, how are you?"
 ```
-
-**Terminal 4 (new terminal):**
-```bash
-cd chat-memory-agent
-python client.py "I'm Bob, a data scientist" "conv-bob"
-```
-
-Each conversation maintains separate context!
-
-### Test 4: Memory Persistence
-
-1. Send message: `python client.py "Remember: I love pizza" "test-memory"`
-2. **Stop the worker** (Ctrl+C in Terminal 2)
-3. **Restart the worker:** `python worker.py`
-4. Send follow-up: `python client.py "What do I love?" "test-memory"`
-
-**Expected:** Agent should remember pizza even after restart!
 
 ## What to Look For
 

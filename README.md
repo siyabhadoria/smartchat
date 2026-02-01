@@ -28,6 +28,8 @@
 ✅ **Multi-turn Conversations** - Maintains conversation context across messages  
 ✅ **Weave Tracing** - Tracks memory retrieval, semantic search, and LLM calls  
 ✅ **Agent Introspection** - Explains reasoning when asked "Why did you say that?"  
+✅ **Self-Improving Loop** - Feedback (👍/👎) penalizes bad facts and injects corrections  
+✅ **Web UI** - Includes a modern web interface for interactive chatting  
 ✅ **Safe Logging** - Only logs safe fields (IDs, lengths) - not sensitive content  
 
 ## The Pattern
@@ -173,20 +175,26 @@ The `--build` flag builds services from your local code. **Leave this running**.
 
 ### Quick Start
 
-**Terminal 2: Run the project**
+**Terminal 2: Run the project (Worker)**
 
 ```bash
 cd chat-memory-agent
-./start.sh
+sh start.sh
 ```
 
-This starts the worker agent.
-
-**Terminal 3: Test it**
+**Terminal 3: Run the Web UI**
 
 ```bash
-python client.py "Hello, how are you?"
+cd chat-memory-agent
+sh start_web.sh
 ```
+
+Access the UI at: `http://localhost:5000`
+
+### Test it
+
+Once the UI is running, simply open it in your browser and start chatting! 
+The agent will automatically remember your conversation and apply self-improvement based on your feedback.
 
 ### Multi-turn Conversation Example
 
@@ -355,7 +363,7 @@ This agent uses [Weave](https://docs.wandb.ai/weave/quickstart) to trace all ste
 ### What Gets Traced
 
 1. **Episodic Memory Retrieval** - Which conversation history was retrieved
-2. **Semantic Memory Search** - Which stored knowledge documents influenced the answer
+2. **Semantic Memory Search** - Which stored knowledge documents influenced the answer (ranking facts)
 3. **Fact Extraction** - What facts were extracted from the user's message
 4. **LLM Prompt Construction** - The full prompt sent to the LLM
 5. **LLM Response** - The generated reply

@@ -47,12 +47,21 @@ soorma dev --build
 
 **Leave this running!**
 
-### Terminal 2: Start the Chat Agent
+### Terminal 2: Start the Chat Agent (Worker)
 
 ```bash
 cd chat-memory-agent
-python worker.py
+sh start.sh
 ```
+
+### Terminal 3: Start the Web UI
+
+```bash
+cd chat-memory-agent
+sh start_web.sh
+```
+
+Access the UI at: `http://localhost:5000`
 
 You should see:
 ```
@@ -72,9 +81,11 @@ You should see:
 
 **Leave this running!**
 
-### Terminal 3: Send Messages
+### Terminal 3: Use the Web UI
 
-## Test Scenarios
+Simply open `http://localhost:5000` in your browser and start chatting!
+
+## Test Scenarios (Web UI)
 
 ### Test 1: Basic Single Message
 
