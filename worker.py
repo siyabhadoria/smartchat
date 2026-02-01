@@ -13,8 +13,7 @@ import os
 import uuid
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
-from litellm import completion
-import weave
+
 from soorma import Worker
 from soorma.context import PlatformContext
 from soorma_common.events import EventEnvelope, EventTopic
@@ -539,7 +538,6 @@ async def _get_conversation_history(
         return []
 
 
-# Create a Worker instance
 worker = Worker(
     name="chat-agent",
     description="A chat agent with memory and LLM capabilities",
@@ -561,7 +559,7 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
         is_helpful = data.get("is_helpful")
         conversation_id_feedback = data.get("conversation_id")
         user_id_feedback = data.get("user_id", "unknown")
-        print(f"   🔍 Feedback received with conversation_id: {conversation_id_feedback}")
+        
         
         # Retrieve trace to see what knowledge was used
         knowledge_used = []
