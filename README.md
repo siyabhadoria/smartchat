@@ -133,16 +133,49 @@ await client.publish(
 
 ### Prerequisites
 
-**1. Install Dependencies**
+**1. Clone and Install Soorma Platform**
+
+The project depends on the **Soorma Platform** for event messaging and memory services. You must clone and install it locally:
+
+```bash
+# Clone the repository (needed for Docker images)
+git clone https://github.com/soorma-ai/soorma-core.git
+
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install the SDK from local source (recommended during pre-launch)
+cd soorma-core
+pip install -e sdk/python
+
+# Build infrastructure containers (required first time)
+soorma dev --build
+```
+
+**2. Install Project Dependencies**
 
 ```bash
 cd chat-memory-agent
 pip install -r requirements.txt
 ```
 
-**2. Set LLM API Key (Optional but Recommended)**
+**3. Required API Keys**
 
-The agent uses LiteLLM which supports multiple providers. Set one of:
+Setting these environment variables is required for full functionality:
+
+| Variable | Required For | Description |
+| :--- | :--- | :--- |
+| `OPENAI_API_KEY` | LLM & TTS | Core reasoning (GPT-4) and Voice synthesis |
+| `ANTHROPIC_API_KEY` | LLM | Alternative reasoning (Claude-3) |
+| `DEEPGRAM_API_KEY` | Voice STT | Real-time speech-to-text for Voice Agent |
+| `DAILY_ROOM_URL` | Voice Agent | URL of a Daily.co room for voice interaction |
+| `LLM_MODEL` | Configuration | (Optional) e.g., `gpt-4o-mini`, `claude-3-haiku` |
+| `WANDB_PROJECT` | Observability | (Optional) Weave tracing project name |
+
+### Setup LLM API Key
+
+The agent uses LiteLLM which supports multiple providers. Set at least one:
 
 ```bash
 export OPENAI_API_KEY='your-openai-key-here'
@@ -150,20 +183,18 @@ export OPENAI_API_KEY='your-openai-key-here'
 export ANTHROPIC_API_KEY='your-anthropic-key-here'
 ```
 
-If no API key is set, the agent will use fallback responses.
-
-**3. Start Platform Services**
+### Start Platform Services
 
 **Terminal 1: Start Platform Services**
 
-From the `soorma-core` root directory:
+From the `soorma-core` directory where you built the containers:
 
 ```bash
 cd soorma-core
 soorma dev --build
 ```
 
-The `--build` flag builds services from your local code. **Leave this running**.
+The `--build` flag ensures services are running with your local configuration. **Leave this running**.
 
 ### Quick Start
 

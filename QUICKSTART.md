@@ -2,26 +2,52 @@
 
 ## Prerequisites Check
 
-### 1. Install Dependencies
+### 1. Install Soorma Platform SDK
+
+The project requires the **Soorma Platform** for event messaging and memory.
 
 ```bash
-cd chat-memory-agent
+# Clone the repository (needed for Docker images)
+git clone https://github.com/soorma-ai/soorma-core.git
+
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install the SDK from local source
+cd soorma-core
+pip install -e sdk/python
+
+# Build infrastructure containers
+soorma dev --build
+```
+
+### 2. Install Project Dependencies
+
+```bash
+cd smartchat
 pip install -r requirements.txt
 ```
 
-### 2. Set LLM API Key (Optional but Recommended)
+### 3. Set Required API Keys
+
+The following environment variables are required:
 
 ```bash
-# Option 1: OpenAI
+# Core LLM (Required)
 export OPENAI_API_KEY='your-openai-key-here'
 
-# Option 2: Anthropic
-export ANTHROPIC_API_KEY='your-anthropic-key-here'
+# Voice Agent (Optional - Required for Voice)
+export DEEPGRAM_API_KEY='your-deepgram-key-here'
+export DAILY_ROOM_URL='your-daily-room-url'
+
+# Observability (Optional)
+export WANDB_PROJECT='chat-memory-agent'
 ```
 
-**Note:** If no API key is set, the agent will use fallback responses (simple echo-like replies).
+**Note:** If no API key is set, the agent will use fallback responses.
 
-### 3. Verify Platform Services
+### 4. Verify Platform Services
 
 Make sure Soorma platform services are running:
 
