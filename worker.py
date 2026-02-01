@@ -20,8 +20,10 @@ from soorma_common.events import EventEnvelope, EventTopic
 from events import (
     CHAT_MESSAGE_EVENT,
     CHAT_REPLY_EVENT,
+    FEEDBACK_EVENT,
     ChatMessagePayload,
     ChatReplyPayload,
+    FeedbackPayload,
 )
 
 from agent_logic import (
@@ -33,42 +35,53 @@ from agent_logic import (
     _get_conversation_history,
     _explain_reasoning,
     feedback_manager,
-    _trace_store
 )
 
 worker = Worker(
     name="chat-agent",
     description="A chat agent with memory and LLM capabilities",
-    capabilities=["chat", "conversation", "memory"],
-    events_consumed=[CHAT_MESSAGE_EVENT],
+    capabilities=["chat", "conversation", "memory", "feedback"],
+    events_consumed=[CHAT_MESSAGE_EVENT, FEEDBACK_EVENT],
     events_produced=[CHAT_REPLY_EVENT],
 )
+
+
+@worker.on_event("chat.feedback", topic=EventTopic.BUSINESS_FACTS)
+async def handle_feedback(event: EventEnvelope, context: PlatformContext):
+    """Handle user feedback events."""
+    data = event.data or {}
+    
+    try:
+        feedback = FeedbackPayload(**data)
+    except Exception as e:
+        print(f"\n❌ Invalid feedback payload: {e}")
+        return
+    
+    print(f"\n📝 Received feedback")
+    print(f"   Message ID: {feedback.message_id}")
+    print(f"   Is Helpful: {feedback.is_helpful}")
+    
+    # Retrieve trace to see what knowledge was used
+    knowledge_used = []
+    trace = await feedback_manager.get_trace(context, feedback.message_id, feedback.user_id)
+    if trace:
+        knowledge_used = [k.get("content") for k in trace.get("knowledge_results", [])]
+    
+    await feedback_manager.log_feedback(
+        context,
+        feedback.message_id,
+        feedback.is_helpful,
+        feedback.user_id,
+        feedback.conversation_id,
+        knowledge_used
+    )
+    print("   ✓ Feedback logged")
 
 
 @worker.on_event("chat.message", topic=EventTopic.ACTION_REQUESTS)
 async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
     """Handle chat message requests with memory and LLM-powered replies."""
     
-    # Check if this is a feedback event (hack since we're reusing topic/event type structure for simplicity)
-    data = event.data or {}
-    if "is_helpful" in data:
-        # Handle feedback
-        message_id = data.get("message_id")
-        is_helpful = data.get("is_helpful")
-        conversation_id_feedback = data.get("conversation_id")
-        user_id_feedback = data.get("user_id", "unknown")
-        
-        
-        # Retrieve trace to see what knowledge was used
-        knowledge_used = []
-        if message_id in _trace_store:
-            trace = _trace_store[message_id]
-            knowledge_used = [k.get("content") for k in trace.get("knowledge_results", [])]
-            
-        await feedback_manager.log_feedback(context, message_id, is_helpful, user_id_feedback, conversation_id_feedback, knowledge_used)
-        print("   ✓ Feedback logged")
-        return
-
     # Validate incoming event payload
     try:
         data = event.data or {}
@@ -148,17 +161,18 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
                     if (interaction.get("role") == "assistant" and 
                         metadata.get("conversation_id") == chat_message.conversation_id):
                         trace_id = metadata.get("trace_id")
-                        if trace_id and trace_id in _trace_store:
-                            trace_data = _trace_store[trace_id]
-                            # Generate explanation from stored trace
-                            explanation = await _explain_reasoning(
-                                trace_id,
-                                trace_data["conversation_history"],
-                                trace_data["knowledge_results"],
-                                trace_data["prompt_used"],
-                                user_id
-                            )
-                            break
+                        if trace_id:
+                            trace_data = await feedback_manager.get_trace(context, trace_id, user_id)
+                            if trace_data:
+                                # Generate explanation from stored trace
+                                explanation = await _explain_reasoning(
+                                    trace_id,
+                                    trace_data["conversation_history"],
+                                    trace_data["knowledge_results"],
+                                    trace_data["prompt_used"],
+                                    user_id
+                                )
+                                break
             except Exception as e:
                 print(f"   ⚠️  Error retrieving trace: {e}")
             
@@ -346,14 +360,19 @@ Your response:"""
             
             # Store trace information for explanation (using reply message_id)
             reply_message_id = str(uuid.uuid4())
-            _trace_store[reply_message_id] = {
-                "conversation_history": conversation_history,
-                "knowledge_results": knowledge_results,
-                "prompt_used": prompt_used,
-                "reply": reply_text,
-                "user_message": chat_message.message,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
+            await feedback_manager.store_trace(
+                context,
+                reply_message_id,
+                {
+                    "conversation_history": conversation_history,
+                    "knowledge_results": knowledge_results,
+                    "prompt_used": prompt_used,
+                    "reply": reply_text,
+                    "user_message": chat_message.message,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                },
+                user_id
+            )
             
             # Store reply message_id in metadata for later retrieval
             trace_metadata = {
