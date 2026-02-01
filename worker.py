@@ -549,7 +549,7 @@ worker = Worker(
 )
 
 
-@worker.on_event("chat.message", topic=EventTopic.BUSINESS_FACTS)
+@worker.on_event("chat.message", topic=EventTopic.ACTION_REQUESTS)
 async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
     """Handle chat message requests with memory and LLM-powered replies."""
     
@@ -900,10 +900,11 @@ Your response:"""
     )
     
     # 8. Publish reply event
-    await context.bus.publish(
-        event_type="chat.reply",
-        topic=EventTopic.ACTION_RESULTS,
+    # Using respond() pattern which automatically handles routing to the caller
+    await context.bus.respond(
+        event_type= event.response_event,
         data=reply_payload.model_dump(),
+        correlation_id=event.correlation_id,
         user_id=user_id,
     )
     
@@ -928,7 +929,7 @@ async def startup():
     print("   • LLM-powered intelligent replies")
     print("   • Multi-turn conversation context")
     print()
-    print("   Listening for 'chat.message' events on topic 'business-facts'...")
+    print("   Listening for 'chat.message' events on topic 'action-requests'...")
     print("   Publishing 'chat.reply' events on topic 'action-results'...")
     print()
     
