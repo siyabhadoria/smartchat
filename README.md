@@ -1,48 +1,40 @@
-# Chat Memory Agent
+# 🚀 SmartChat: Cognitive Memory Agent
 
-**Concepts:** Worker pattern, Structured events, Pydantic validation, Episodic memory, Semantic memory, RAG, LLM integration, Multi-turn conversations, Weave tracing, Agent introspection  
-**Difficulty:** Intermediate  
-**Prerequisites:** Understanding of Pydantic models, LLM APIs
+SmartChat is a sophisticated AI agent built on the **CoALA (Cognitive Architectures for LLM Agents)** framework. Unlike stateless bots, it implements a triple-memory system and a continuous self-improvement loop that learns directly from user feedback.
 
-## What You'll Learn
+---
 
-- How to define structured events with Pydantic schemas
-- How to validate incoming events using typed payloads
-- How to use episodic memory to store conversation history
-- How to use semantic memory to store and retrieve facts
-- How to implement RAG (Retrieval-Augmented Generation) pattern
-- How to extract facts from conversations automatically
-- How to retrieve conversation context for multi-turn conversations
-- How to integrate LLM for intelligent replies
-- How to use Weave tracing for agent introspection and explainability
-- Best practices for logging (safe fields only)
+### 🧠 The Core Framework: Triple-Memory System
+To achieve human-like cognition, SmartChat uses three distinct memory layers:
+*   **1. Episodic Memory (History)**: A time-ordered log of past conversations. It helps the agent remember the "flow" of what has been discussed.
+*   **2. Semantic Memory (Knowledge)**: A vector-searchable database of extracted facts (e.g., "User hates spicy food"). It retrieves these via RAG to ground responses in truth.
+*   **3. Working Memory (Active State)**: Stores live reasoning traces and real-time feedback penalties. This powers the "Why did you say that?" feature.
 
-## Features
+---
 
-✅ **Structured Events** - Typed Pydantic schemas for all payloads  
-✅ **Episodic Memory** - Stores all conversation history  
-✅ **Semantic Memory** - Stores and retrieves facts/knowledge  
-✅ **RAG Pattern** - Combines episodic + semantic memory for intelligent replies  
-✅ **Automatic Fact Extraction** - Extracts facts from conversations using LLM  
-✅ **LLM Integration** - Generates intelligent, context-aware replies  
-✅ **Multi-turn Conversations** - Maintains conversation context across messages  
-✅ **Weave Tracing** - Tracks memory retrieval, semantic search, and LLM calls  
-✅ **Agent Introspection** - Explains reasoning when asked "Why did you say that?"  
-✅ **Self-Improving Loop** - Feedback (👍/👎) penalizes bad facts and injects corrections  
-✅ **Web UI** - Includes a modern web interface for interactive chatting  
-✅ **Safe Logging** - Only logs safe fields (IDs, lengths) - not sensitive content  
+### 🔄 The Self-Improvement Loop
+SmartChat evolves its behavior based on your feedback:
+1. **User Feedback**: Click **Thumbs Up/Down (👍/👎)** on any response.
+2. **Score Penalization**: Negative feedback triggers an update in **Working Memory** that applies a penalty to the facts used for that answer.
+3. **Episodic Injection**: A correction is injected into the conversation history, ensuring the LLM sees the rejection in context.
+4. **Learning**: The agent instantly prioritizes corrected information in the next turn.
 
-## The Pattern
+---
 
-This project demonstrates a complete chat agent with RAG (Retrieval-Augmented Generation):
-1. **Structured Events** - Typed schemas for chat messages and replies
-2. **Episodic Memory** - Stores conversation history for context
-3. **Semantic Memory** - Stores facts/knowledge extracted from conversations
-4. **RAG Pattern** - Combines episodic + semantic memory for intelligent replies
-5. **Automatic Fact Extraction** - Uses LLM to extract facts from user messages
-6. **Knowledge Retrieval** - Searches semantic memory for relevant facts
-7. **LLM-Powered Replies** - Uses LLM with both memory types for context-aware responses
-8. **Multi-turn Support** - Maintains conversation context across multiple messages
+## Key Features
+
+✅ **CoALA Architecture** - Structured cognitive architecture for reliable agent behavior  
+✅ **Unified Voice (Pipecat)** - Hands-free voice interface using Daily, Deepgram, and OpenAI  
+✅ **Transparent Reasoning** - Agent explains its internal thought process on demand  
+✅ **Automatic Fact Extraction** - LLM-powered extraction of user preferences and facts  
+✅ **Weave Tracing** - Deep observability with Weights & Biases Weave  
+
+## The Cognitive Pattern
+1. **Perception** - Takes in structured text or voice events.
+2. **Cognition** - Retrieves history (Episodic) and relevant knowledge (Semantic).
+3. **Reasoning** - Composes a grounded prompt, storing the "trace" in Working Memory.
+4. **Learning** - Extracts new facts and updates scores based on feedback.
+5. **Action** - Responds via text or voice.
 
 ## Code Walkthrough
 
@@ -275,27 +267,8 @@ Expected output:
    ✅ Reply published
 ```
 
-## Memory Architecture
 
-### Dual Memory System
-
-The agent uses **two types of memory** following the CoALA framework:
-
-#### Episodic Memory (Conversation History)
-
-- **Stores**: All user messages and assistant replies
-- **Scoped by**: `agent_id` + `user_id` + `conversation_id` (in metadata)
-- **Retrieval**: Gets last 10 interactions for conversation context
-- **Use case**: Multi-turn conversations, conversation continuity
-
-#### Semantic Memory (Stored Facts)
-
-- **Stores**: Facts and knowledge extracted from conversations
-- **Scoped by**: `user_id` (facts are user-specific)
-- **Retrieval**: Semantic search using vector similarity
-- **Use case**: Long-term knowledge, answering questions about learned facts
-
-### How It Works (RAG Pattern)
+### How It Works (Cognitive Cycle)
 
 1. **User sends message** → Stored in episodic memory with role="user"
 2. **Agent extracts facts** → LLM identifies factual information to remember
@@ -341,27 +314,7 @@ The agent uses LiteLLM which supports:
 
 Set via `LLM_MODEL` environment variable.
 
-## Example Usage
 
-### Learning Facts
-
-```
-User: "My name is Alice and I love Python programming"
-Agent: Extracts facts → Stores "User's name is Alice" and "User loves Python programming"
-```
-
-### Recalling Facts
-
-```
-User: "What programming language do I like?"
-Agent: Searches semantic memory → Finds "User loves Python programming" → Answers with stored fact
-```
-
-### Combining Memory Types
-
-The agent uses both:
-- **Episodic**: "We discussed Python earlier in this conversation"
-- **Semantic**: "You told me you love Python programming"
 
 ## Weave Tracing & Agent Introspection
 
