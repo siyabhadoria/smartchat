@@ -14,13 +14,71 @@ weave.init(weave_project)
 # Deterministic UUID for the "global" penalties plan
 KNOWLEDGE_PENALTIES_PLAN_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, "knowledge-penalties"))
 
-# Store trace information for explanations
-_trace_store: Dict[str, Dict] = {}
+# Deterministic UUID for trace storage plan
+TRACE_STORAGE_PLAN_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, "trace-storage"))
+
 
 class FeedbackManager:
     """
     Manages user feedback and adjusts memory scoring using Working Memory.
     """
+    
+    async def store_trace(
+        self,
+        context: PlatformContext,
+        message_id: str,
+        trace_data: Dict,
+        user_id: str
+    ):
+        """
+        Store trace information in working memory.
+        
+        Args:
+            context: Platform context
+            message_id: Message ID (used as key)
+            trace_data: Trace data dict (conversation_history, knowledge_results, etc.)
+            user_id: User ID for tenant isolation
+        """
+        try:
+            await context.memory.store(
+                plan_id=TRACE_STORAGE_PLAN_ID,
+                key=message_id,
+                value=trace_data,
+                tenant_id=user_id,
+                user_id=user_id
+            )
+        except Exception as e:
+            print(f"   ⚠️  Error storing trace: {e}")
+    
+    async def get_trace(
+        self,
+        context: PlatformContext,
+        message_id: str,
+        user_id: str
+    ) -> Optional[Dict]:
+        """
+        Retrieve trace information from working memory.
+        
+        Args:
+            context: Platform context
+            message_id: Message ID (used as key)
+            user_id: User ID for tenant isolation
+            
+        Returns:
+            Trace data dict or None if not found
+        """
+        try:
+            trace = await context.memory.retrieve(
+                plan_id=TRACE_STORAGE_PLAN_ID,
+                key=message_id,
+                tenant_id=user_id,
+                user_id=user_id
+            )
+            return trace
+        except Exception as e:
+            print(f"   ⚠️  Error retrieving trace: {e}")
+            return None
+    
     async def log_feedback(
         self, 
         context,

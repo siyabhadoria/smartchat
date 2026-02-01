@@ -36,6 +36,15 @@ class ChatReplyPayload(BaseModel):
     message_id: Optional[str] = Field(None, description="Unique identifier for this reply message")
 
 
+class FeedbackPayload(BaseModel):
+    """Payload for chat.feedback events."""
+    message_id: str = Field(..., description="ID of the message being rated")
+    conversation_id: str = Field(..., description="ID of the conversation thread")
+    is_helpful: bool = Field(..., description="Whether the message was helpful")
+    user_id: str = Field(..., description="ID of the user providing feedback")
+    timestamp: str = Field(..., description="ISO 8601 timestamp when the feedback was created")
+
+
 # =============================================================================
 # Event Definitions
 # =============================================================================
@@ -56,6 +65,15 @@ CHAT_REPLY_EVENT = EventDefinition(
     topic=EventTopic.ACTION_RESULTS.value,
     description="A reply from the chat agent in response to a user message",
     payload_schema=ChatReplyPayload.model_json_schema(),
+)
+
+# User feedback event
+# Uses BUSINESS_FACTS topic (domain event)
+FEEDBACK_EVENT = EventDefinition(
+    event_name="chat.feedback",
+    topic=EventTopic.BUSINESS_FACTS.value,
+    description="User feedback rating for a chat message",
+    payload_schema=FeedbackPayload.model_json_schema(),
 )
 
 

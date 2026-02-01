@@ -199,18 +199,18 @@ async def _send_feedback_event(message_id: str, is_helpful: bool, conversation_i
         await client.connect(topics=[])
         
         # Publish feedback event
-        # We reuse chat.message but with special payload structure
+        # Use new FEEDBACK_EVENT definition
         feedback_data = {
             "message_id": message_id,
-            "conversation_id": conversation_id,
+            "conversation_id": conversation_id or "unknown",
             "is_helpful": is_helpful,
             "user_id": DEFAULT_USER_ID,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         await client.publish(
-            event_type="chat.message",
-            topic=EventTopic.ACTION_REQUESTS,
+            event_type="chat.feedback",
+            topic=EventTopic.BUSINESS_FACTS,
             data=feedback_data,
         )
     finally:
