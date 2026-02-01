@@ -105,10 +105,16 @@ async def _send_chat_message(message: str, conversation_id: str):
         )
         
         # Publish the structured event
+        # Publish the structured event with request/reply pattern
+        correlation_id = str(uuid.uuid4())
+        
         await client.publish(
             event_type="chat.message",
-            topic=EventTopic.BUSINESS_FACTS,
+            topic=EventTopic.ACTION_REQUESTS,
             data=message_payload.model_dump(),
+            correlation_id=correlation_id,
+            response_event="chat.reply",
+            response_topic="action-results",
         )
         
         # Wait for the response (with timeout)
@@ -204,7 +210,7 @@ async def _send_feedback_event(message_id: str, is_helpful: bool, conversation_i
         
         await client.publish(
             event_type="chat.message",
-            topic=EventTopic.BUSINESS_FACTS,
+            topic=EventTopic.ACTION_REQUESTS,
             data=feedback_data,
         )
     finally:
