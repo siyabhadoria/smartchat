@@ -79,10 +79,15 @@ async def send_chat_message(message: str = "Hello", conversation_id: str = None)
     print()
     
     # Publish the structured event
+    correlation_id = str(uuid4())
+    
     await client.publish(
         event_type="chat.message",
-        topic=EventTopic.BUSINESS_FACTS,
+        topic=EventTopic.ACTION_REQUESTS,
         data=message_payload.model_dump(),
+        correlation_id=correlation_id,
+        response_event="chat.reply",
+        response_topic="action-results",
     )
     
     print("📤 Message sent!")

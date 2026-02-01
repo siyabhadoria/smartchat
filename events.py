@@ -44,7 +44,7 @@ class ChatReplyPayload(BaseModel):
 # Uses BUSINESS_FACTS topic (domain event)
 CHAT_MESSAGE_EVENT = EventDefinition(
     event_name="chat.message",
-    topic=EventTopic.BUSINESS_FACTS.value,
+    topic=EventTopic.ACTION_REQUESTS.value,
     description="A chat message from a user that needs to be processed by the chat agent",
     payload_schema=ChatMessagePayload.model_json_schema(),
 )
@@ -69,13 +69,13 @@ if __name__ == "__main__":
     print("Input Event:")
     print("-" * 70)
     print(f"📧 {CHAT_MESSAGE_EVENT.event_name}")
-    print(f"   Topic: {CHAT_MESSAGE_EVENT.topic} (business-facts)")
+    print(f"   Topic: {CHAT_MESSAGE_EVENT.topic} (request)")
     print(f"   Description: {CHAT_MESSAGE_EVENT.description}")
     
     print("\nOutput Event:")
     print("-" * 70)
     print(f"📧 {CHAT_REPLY_EVENT.event_name}")
-    print(f"   Topic: {CHAT_REPLY_EVENT.topic} (action-results)")
+    print(f"   Topic: {CHAT_REPLY_EVENT.topic} (response)")
     print(f"   Description: {CHAT_REPLY_EVENT.description}")
     
     print("\n" + "=" * 70)
