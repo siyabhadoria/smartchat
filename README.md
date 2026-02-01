@@ -189,6 +189,13 @@ cd chat-memory-agent
 sh start_web.sh
 ```
 
+**Terminal 4: Run the Voice Agent (Pipecat)**
+
+```bash
+cd chat-memory-agent
+sh start_voice.sh
+```
+
 Access the UI at: `http://localhost:5000`
 
 ### Test it

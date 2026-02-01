@@ -2,3 +2,6 @@ litellm>=1.0.0
 flask>=3.0.0
 flask-cors>=4.0.0
 weave>=0.0.1
+pipecat-ai[daily,openai,deepgram]
+aiohttp
+loguru

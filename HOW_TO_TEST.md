@@ -181,6 +181,35 @@ Send 15+ messages in the same conversation - agent uses last 10 for context.
 3. Restart services
 4. Send message - should work
 
+
+## Scenario 4: Voice Interaction (Pipecat + Daily)
+
+**Objective**: Verify the agent can hear, speak, and remember information via voice.
+
+1.  **Set Environment Variables**:
+    ```bash
+    export DAILY_ROOM_URL="https://yourdomain.daily.co/roomname"
+    export DEEPGRAM_API_KEY="your-deepgram-key"
+    export OPENAI_API_KEY="your-openai-key"
+    ```
+2.  **Start Platform**:
+    ```bash
+    soorma dev --build
+    ```
+3.  **Start Voice Worker**:
+    ```bash
+    sh start_voice.sh
+    ```
+4.  **Join the Room**: Open the Daily room URL in your browser.
+5.  **Talk to Agent**: 
+    - Say: *"My name is Siya and I am testing voice."*
+    - The agent should respond: *"Hello Siya, I've noted that you are testing voice..."*
+6.  **Verify Cross-Memory**:
+    - Stop the voice worker.
+    - Start the Web UI (`sh start_web.sh`).
+    - Ask in the web chat: *"What is my name?"*
+    - **Expected Result**: The web agent should answer *"Your name is Siya."* (proving the voice agent successfully stored the fact in Semantic Memory).
+
 ## Next Steps
 
 - Try different conversation topics

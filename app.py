@@ -34,7 +34,12 @@ def get_conversation_id():
 @app.route('/')
 def index():
     """Render the chat interface."""
-    return render_template('index.html')
+    daily_room_url = os.environ.get('DAILY_ROOM_URL', '')
+    if daily_room_url:
+        print(f"📡 Voice Integration Active: {daily_room_url}")
+    else:
+        print("⚠️  Voice Integration Inactive: DAILY_ROOM_URL not set.")
+    return render_template('index.html', daily_room_url=daily_room_url)
 
 
 @app.route('/api/chat', methods=['POST'])
