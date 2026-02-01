@@ -80,7 +80,6 @@ def _format_knowledge_context(knowledge_results: List[Dict]) -> str:
     return "\n\n".join(formatted)
 
 
-@weave.op()
 async def _search_semantic_memory(
     context: PlatformContext,
     query: str,
@@ -106,6 +105,16 @@ async def _search_semantic_memory(
             user_id=user_id,
             limit=limit
         )
+        
+        if results:
+            print(f"   📝 Retrieved {len(results)} knowledge items for query: '{query}'")
+            for i, item in enumerate(results[:3], 1):
+                content_preview = item.get("content", "")[:50]
+                score = item.get("score", 0)
+                print(f"      {i}. [{score:.2f}] {content_preview}...")
+        else:
+            print(f"   ℹ️  No knowledge found for query: '{query}'")
+            
         return results
     except Exception as e:
         print(f"   ⚠️  Error searching semantic memory: {e}")
@@ -356,13 +365,7 @@ async def _extract_facts_from_message(
     Returns:
         List of extracted facts (strings)
     """
-    # Format conversation history for context
-    history_context = _format_conversation_history(conversation_history[-5:])  # Last 5 for context
-    
     prompt = f"""Analyze the following user message and extract any factual information that should be remembered.
-
-CONVERSATION CONTEXT:
-{history_context}
 
 CURRENT MESSAGE: {message}
 
@@ -467,7 +470,6 @@ Your response:"""
             return f"Hello! I received your message: {message}. I'm here to help!"
 
 
-@weave.op()
 async def _get_conversation_history(
     context: PlatformContext,
     conversation_id: str,
@@ -773,7 +775,8 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
         try:
             extracted_facts = await _extract_facts_from_message(
                 chat_message.message,
-                conversation_history
+                # conversation_history (removed to avoid duplicate facts)
+                [] 
             )
             if extracted_facts:
                 print(f"   ✓ Extracted {len(extracted_facts)} facts")
