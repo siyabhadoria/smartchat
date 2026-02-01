@@ -93,30 +93,41 @@ async def start_voice_pipeline(context: PlatformContext):
 
     logger.info(f"Connecting to Daily room: {room_url}")
     
-    async with aiohttp.ClientSession() as session:
-        transport = DailyTransport(
-            room_url,
-            None,
-            "SmartChat Voice Assistant",
-            DailyTransport.Config(audio_out_enabled=True)
-        )
+    # We create the transport, services, and pipeline.
+    # No need for aiohttp.ClientSession here as Pipecat handles its own networking.
+    transport = DailyTransport(
+        room_url,
+        None,
+        "SmartChat Voice Assistant",
+        DailyTransport.Config(audio_out_enabled=True)
+    )
 
-        stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
-        tts = OpenAITTSService(api_key=os.getenv("OPENAI_API_KEY"), voice="alloy")
-        smart_chat = SmartChatVoiceProcessor(context)
+    stt = DeepgramSTTService(api_key=os.getenv("DEEPGRAM_API_KEY"))
+    tts = OpenAITTSService(api_key=os.getenv("OPENAI_API_KEY"), voice="alloy")
+    smart_chat = SmartChatVoiceProcessor(context)
 
-        pipeline = Pipeline([
-            transport.input(),   # Mic
-            stt,                 # Speech -> Text
-            smart_chat,          # Text -> SmartChat -> Reply
-            tts,                 # Reply -> Audio
-            transport.output(),  # Speaker
-        ])
+    pipeline = Pipeline([
+        transport.input(),   # Mic
+        stt,                 # Speech -> Text
+        smart_chat,          # Text -> SmartChat -> Reply
+        tts,                 # Reply -> Audio
+        transport.output(),  # Speaker
+    ])
 
-        runner = PipelineRunner()
-        # Launching the pipeline in the background so the Soorma Worker stays active
-        asyncio.create_task(runner.run(pipeline))
-        logger.info("✅ Pipecat Voice Pipeline is running!")
+    runner = PipelineRunner()
+    
+    # Launching the pipeline in the background so the Soorma Worker stays active.
+    # We keep a reference to the task to prevent it from being garbage collected.
+    context.voice_task = asyncio.create_task(runner.run(pipeline))
+    
+    # Add a welcoming message once joined
+    async def say_hello():
+        await asyncio.sleep(5)  # Give room time to connect
+        logger.info("👋 Sending greeting...")
+        await smart_chat.push_frame(TextFrame("Hello! I am your voice assistant. How can I help you today?"))
+    
+    asyncio.create_task(say_hello())
+    logger.info("✅ Pipecat Voice Pipeline is running!")
 
 if __name__ == "__main__":
     worker.run()
