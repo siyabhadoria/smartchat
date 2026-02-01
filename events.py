@@ -33,6 +33,7 @@ class ChatReplyPayload(BaseModel):
     reply: str = Field(..., description="The agent's reply content")
     timestamp: str = Field(..., description="ISO 8601 timestamp when the reply was created")
     in_response_to: str = Field(..., description="message_id of the message this reply responds to")
+    message_id: Optional[str] = Field(None, description="Unique identifier for this reply message")
 
 
 # =============================================================================

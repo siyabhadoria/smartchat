@@ -48,7 +48,12 @@ def _format_conversation_history(history: List[Dict]) -> str:
     for interaction in history[-10:]:  # Last 10 interactions for context
         role = interaction.get("role", "unknown")
         content = interaction.get("content", "")
-        formatted.append(f"{role.capitalize()}: {content}")
+        
+        if role == "system":
+            # Emphasize system messages (corrections)
+            formatted.append(f"[SYSTEM]: {content}")
+        else:
+            formatted.append(f"{role.capitalize()}: {content}")
     
     return "\n".join(formatted)
 
@@ -112,6 +117,160 @@ async def _search_semantic_memory(
 _trace_store: Dict[str, Dict] = {}
 
 
+import uuid
+
+# Deterministic UUID for the "global" penalties plan
+# We use a constant UUID so all workers share the same "plan" for knowledge penalties
+KNOWLEDGE_PENALTIES_PLAN_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, "knowledge-penalties"))
+
+class FeedbackManager:
+    """
+    Manages user feedback and adjusts memory scoring using Working Memory.
+    
+    Stores feedback as:
+    - Raw feedback: plan_id="msg:{message_id}"
+    - Penalties: plan_id="knowledge-penalties" (key=content_hash, value=penalty)
+    """
+    
+    def __init__(self):
+        # We don't store state locally anymore
+        pass
+        
+    async def log_feedback(
+        self, 
+        context: PlatformContext,
+        message_id: str, 
+        is_helpful: bool, 
+        user_id: str,
+        conversation_id: str = None, 
+        knowledge_used: List[str] = None
+    ):
+        """
+        Log feedback for a message to Working Memory.
+        """
+        # 1. Store the raw feedback record (immutable record)
+        # We use the message_id (UUID) as the plan_id directly
+        # The service requires plan_id to be a valid UUID
+        try:
+            await context.memory.store(
+                plan_id=message_id,  # Assumes message_id is a UUID
+                key="feedback",
+                value={
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "is_helpful": is_helpful,
+                    "user_id": user_id,
+                    "knowledge_used": knowledge_used or []
+                },
+                tenant_id=user_id, # Simplified for single-user demo
+                user_id=user_id
+            )
+            
+            # 2. Update penalties for used knowledge if unhelpful
+            if not is_helpful:
+                if knowledge_used:
+                    await self._update_penalties(context, knowledge_used, user_id)
+                
+                # 2.1 Inject System Correction into Episodic Memory
+                # This ensures the LLM knows its previous response was rejected in the next turn
+                try:
+                    await context.memory.log_interaction(
+                        agent_id="chat-agent",
+                        role="system",
+                        content=f"User marked the previous response (msg:{message_id}) as unhelpful/incorrect. Please correct your understanding.",
+                        user_id=user_id,
+                        metadata={
+                            "in_response_to": message_id,
+                            "conversation_id": conversation_id, # REQUIRED for retrieval
+                            "type": "feedback_correction",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                    )
+                    print(f"   ✓ Injected system correction for msg:{message_id}")
+                except Exception as e:
+                    print(f"   ⚠️  Error injecting correction: {e}")
+            
+            # 3. Log to Weave (observability)
+            # We use a helper method decorated with @weave.op to trace this event
+            self._trace_feedback(message_id, is_helpful, user_id, knowledge_used)
+            
+            print(f"   ✓ Feedback logged to Memory Service (msg:{message_id})")
+        except Exception as e:
+            print(f"   ⚠️  Error logging feedback to Memory Service: {e}")
+
+    @weave.op()
+    def _trace_feedback(self, message_id: str, is_helpful: bool, user_id: str, knowledge_used: List[str] = None):
+        """
+        Trace feedback event in Weave.
+        """
+        return {
+            "feedback_type": "user_rating",
+            "message_id": message_id,
+            "is_helpful": is_helpful,
+            "user_id": user_id,
+            "knowledge_used": knowledge_used
+        }
+        
+    async def _update_penalties(self, context: PlatformContext, knowledge_items: List[str], user_id: str):
+        """Increment penalty for knowledge items involved in negative feedback."""
+        import hashlib
+        
+        for item in knowledge_items:
+            try:
+                # Hash content to use as a key
+                content_hash = hashlib.md5(item.encode()).hexdigest()
+                
+                # Get current penalty
+                current_penalty = await context.memory.retrieve(
+                    plan_id=KNOWLEDGE_PENALTIES_PLAN_ID,
+                    key=content_hash,
+                    tenant_id=user_id,
+                    user_id=user_id
+                ) or 0.0
+                
+                # Increment penalty
+                new_penalty = float(current_penalty) + 0.1
+                
+                # Store updated penalty
+                await context.memory.store(
+                    plan_id=KNOWLEDGE_PENALTIES_PLAN_ID,
+                    key=content_hash,
+                    value=new_penalty,
+                    tenant_id=user_id,
+                    user_id=user_id
+                )
+                print(f"      Updated penalty for knowledge hash {content_hash[:8]}: {new_penalty:.2f}")
+            except Exception as e:
+                print(f"      ⚠️  Error updating penalty: {e}")
+
+    async def adjust_score(self, context: PlatformContext, content: str, original_score: float, user_id: str) -> float:
+        """
+        Adjust score based on stored penalties in Working Memory.
+        """
+        try:
+            import hashlib
+            content_hash = hashlib.md5(content.encode()).hexdigest()
+            
+            # specific to this user/tenant context
+            penalty = await context.memory.retrieve(
+                plan_id=KNOWLEDGE_PENALTIES_PLAN_ID,
+                key=content_hash,
+                tenant_id=user_id,
+                user_id=user_id
+            ) or 0.0
+            
+            if float(penalty) > 0:
+                print(f"      Applying penalty of {penalty} to knowledge hash {content_hash[:8]}")
+            
+            return max(0.0, original_score - float(penalty))
+        except Exception as e:
+            print(f"   ⚠️  Error retrieving penalty: {e}")
+            return original_score
+
+
+# Global feedback manager
+feedback_manager = FeedbackManager()
+
+
 async def _explain_reasoning(
     message_id: str,
     conversation_history: List[Dict],
@@ -135,63 +294,51 @@ async def _explain_reasoning(
         user_id: User ID
     
     Returns:
-        Human-readable explanation
+        Structured markdown explanation
     """
-    # Format episodic memories
-    episodic_summary = "No previous conversation history."
+    # 1. Episodic Memories Section
+    episodic_section = "### 🧠 Episodic Memories (Context)\n"
     if conversation_history:
-        episodic_list = []
         for i, interaction in enumerate(conversation_history[-5:], 1):
             role = interaction.get("role", "unknown")
-            content = interaction.get("content", "")[:100]
-            episodic_list.append(f"{i}. {role.capitalize()}: {content}...")
-        episodic_summary = "\n".join(episodic_list)
+            content = interaction.get("content", "")[:80].replace("\n", " ")
+            # Estimate confidence based on recency (simple heuristic)
+            confidence = "High" if i > 3 else "Medium"
+            episodic_section += f"- **{role.capitalize()}**: \"{content}...\" *(Confidence: {confidence})*\n"
+    else:
+        episodic_section += "_No recent conversation history used._\n"
     
-    # Format semantic documents
-    semantic_summary = "No relevant stored knowledge was used."
+    # 2. Semantic Knowledge Section
+    semantic_section = "### 📚 Semantic Knowledge (Facts)\n"
     if knowledge_results:
-        semantic_list = []
-        for i, knowledge in enumerate(knowledge_results[:5], 1):
-            content = knowledge.get("content", "")[:100]
+        for knowledge in knowledge_results:
+            content = knowledge.get("content", "")
             score = knowledge.get("score", 0)
-            semantic_list.append(f"{i}. (relevance: {score:.3f}) {content}...")
-        semantic_summary = "\n".join(semantic_list)
+            semantic_section += f"- \"{content}\"\n"
+    else:
+        semantic_section += "_No relevant stored knowledge found._\n"
+        
+    # 3. Web Steps Section (Placeholder for future)
+    web_section = "### 🌐 Web Actions\n_None taken._\n"
     
-    # Create explanation prompt
-    explanation_prompt = f"""Explain how the AI agent arrived at its previous response.
+    # 4. Prompt Composition Section
+    # Extract the system/instruction part of the prompt for valid display
+    prompt_preview = prompt_used.split("INSTRUCTIONS:")[0].strip()
+    if len(prompt_preview) > 300:
+        prompt_preview = prompt_preview[:300] + "..."
+        
+    prompt_section = "### 📝 Prompt Composition\n"
+    prompt_section += f"```text\n{prompt_preview}\n[...Instructions...]\n```\n"
+    
+    # Combine sections
+    full_explanation = f"""## 🔎 Reasoning Explanation
 
-EPISODIC MEMORIES RETRIEVED (conversation history):
-{episodic_summary}
-
-SEMANTIC DOCUMENTS RETRIEVED (stored knowledge):
-{semantic_summary}
-
-LLM PROMPT USED:
-{prompt_used[:500]}...
-
-INSTRUCTIONS:
-1. Explain which episodic memories (conversation history) influenced the response
-2. Explain which semantic documents (stored knowledge) influenced the response
-3. Explain how the LLM prompt combined these sources
-4. Be clear and concise
-5. Use natural language, as if explaining to a user
-
-Your explanation:"""
-
-    try:
-        response = completion(
-            model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
-            messages=[{"role": "user", "content": explanation_prompt}],
-            temperature=0.5,  # Lower temperature for more factual explanations
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"   ⚠️  Error generating explanation: {e}")
-        # Fallback explanation
-        return f"""I used:
-- {len(conversation_history)} previous conversation interactions
-- {len(knowledge_results)} relevant stored knowledge fragments
-- An LLM prompt that combined both sources to generate my response"""
+{episodic_section}
+{semantic_section}
+{web_section}
+{prompt_section}
+"""
+    return full_explanation
 
 
 @weave.op()
@@ -344,7 +491,7 @@ async def _get_conversation_history(
         recent = await context.memory.get_recent_history(
             agent_id="chat-agent",
             user_id=user_id,
-            limit=50  # Get more to ensure we find all interactions for this conversation
+            limit=100  # Get more to ensure we find all interactions for this conversation
         )
         
         # Filter by conversation_id from metadata
@@ -406,6 +553,26 @@ worker = Worker(
 async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
     """Handle chat message requests with memory and LLM-powered replies."""
     
+    # Check if this is a feedback event (hack since we're reusing topic/event type structure for simplicity)
+    data = event.data or {}
+    if "is_helpful" in data:
+        # Handle feedback
+        message_id = data.get("message_id")
+        is_helpful = data.get("is_helpful")
+        conversation_id_feedback = data.get("conversation_id")
+        user_id_feedback = data.get("user_id", "unknown")
+        print(f"   🔍 Feedback received with conversation_id: {conversation_id_feedback}")
+        
+        # Retrieve trace to see what knowledge was used
+        knowledge_used = []
+        if message_id in _trace_store:
+            trace = _trace_store[message_id]
+            knowledge_used = [k.get("content") for k in trace.get("knowledge_results", [])]
+            
+        await feedback_manager.log_feedback(context, message_id, is_helpful, user_id_feedback, conversation_id_feedback, knowledge_used)
+        print("   ✓ Feedback logged")
+        return
+
     # Validate incoming event payload
     try:
         data = event.data or {}
@@ -558,6 +725,10 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
             "is_explanation": True,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+        
+        # IMPORTANT: Generate a message ID for the explanation itself
+        # This allows the user to provide feedback on the explanation
+        reply_message_id = str(uuid.uuid4())
     else:
         # Normal message processing with Weave tracing
         
@@ -565,12 +736,25 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
         print("   📚 Searching semantic memory for relevant knowledge...")
         knowledge_results = []
         try:
-            knowledge_results = await _search_semantic_memory(
+            raw_results = await _search_semantic_memory(
                 context,
                 chat_message.message,
                 user_id,
                 limit=5
             )
+            
+            # Apply feedback adjustments
+            knowledge_results = []
+            for item in raw_results:
+                original_score = item.get("score", 0)
+                content = item.get("content", "")
+                new_score = await feedback_manager.adjust_score(context, content, original_score, user_id)
+                item["score"] = new_score
+                knowledge_results.append(item)
+                
+            # Re-sort based on new scores
+            knowledge_results.sort(key=lambda x: x["score"], reverse=True)
+            
             if knowledge_results:
                 print(f"   ✓ Found {len(knowledge_results)} relevant knowledge fragments")
                 top_score = knowledge_results[0].get("score", 0)
@@ -698,12 +882,21 @@ Your response:"""
         print(f"   ⚠️  Error storing reply: {e}")
     
     # 7. Create structured reply payload
+    # Add the message ID so the UI knows what to vote on
+    # Check if we generated a message_id in the trace logic above
+    actual_message_id = None
+    if 'trace_metadata' in locals() and 'message_id' in trace_metadata:
+        actual_message_id = trace_metadata['message_id']
+    elif 'reply_message_id' in locals():
+         actual_message_id = reply_message_id
+         
     reply_payload = ChatReplyPayload(
         user_id=user_id,
         conversation_id=chat_message.conversation_id,
         reply=reply_text,
         timestamp=datetime.now(timezone.utc).isoformat(),
         in_response_to=chat_message.message_id,
+        message_id=actual_message_id
     )
     
     # 8. Publish reply event

@@ -117,6 +117,7 @@ async def _send_chat_message(message: str, conversation_id: str):
                 'reply': reply.reply,
                 'timestamp': reply.timestamp,
                 'conversation_id': conversation_id,
+                'message_id': getattr(reply, 'message_id', None),
             }
         else:
             return {
@@ -155,6 +156,54 @@ def get_conversation():
     return jsonify({
         'conversation_id': conversation_id
     })
+
+@app.route('/api/feedback', methods=['POST'])
+def send_feedback():
+    """Send user feedback for a message."""
+    data = request.json
+    message_id = data.get('message_id')
+    is_helpful = data.get('is_helpful')
+    
+    conversation_id = data.get('conversation_id')
+    
+    if not message_id or is_helpful is None:
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    # Run async client code
+    try:
+        asyncio.run(_send_feedback_event(message_id, is_helpful, conversation_id))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+async def _send_feedback_event(message_id: str, is_helpful: bool, conversation_id: str = None):
+    """Publish a feedback event."""
+    client = EventClient(
+        agent_id="chat-web-client",
+        source="chat-web-client",
+    )
+    
+    try:
+        await client.connect(topics=[])
+        
+        # Publish feedback event
+        # We reuse chat.message but with special payload structure
+        feedback_data = {
+            "message_id": message_id,
+            "conversation_id": conversation_id,
+            "is_helpful": is_helpful,
+            "user_id": DEFAULT_USER_ID,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await client.publish(
+            event_type="chat.message",
+            topic=EventTopic.BUSINESS_FACTS,
+            data=feedback_data,
+        )
+    finally:
+        await client.disconnect()
 
 
 if __name__ == '__main__':
