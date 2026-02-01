@@ -33,13 +33,17 @@ fi
 echo "✓ Platform services detected"
 echo ""
 
-# Start the Worker Agent (Text)
+# Start the Worker Agents
 echo "======================================================================"
-echo "  Starting Worker Agent (Text)"
+echo "  Starting Worker Agents"
 echo "======================================================================"
 python3 "$PROJECT_DIR/worker.py" &
 WORKER_PID=$!
 PIDS+=($WORKER_PID)
+
+python3 "$PROJECT_DIR/feedback_worker.py" &
+FEEDBACK_PID=$!
+PIDS+=($FEEDBACK_PID)
 
 # Conditional Start: Voice Agent (Pipecat)
 if [ -n "$DAILY_ROOM_URL" ]; then
@@ -63,6 +67,7 @@ echo ""
 echo "======================================================================"
 echo "  ✓ Agents Running"
 echo "  - Text Agent PID: $WORKER_PID"
+echo "  - Feedback Agent PID: $FEEDBACK_PID"
 [ -n "$VOICE_PID" ] && echo "  - Voice Agent PID: $VOICE_PID"
 echo "======================================================================"
 echo ""

@@ -20,10 +20,12 @@ from soorma_common.events import EventEnvelope, EventTopic
 from events import (
     CHAT_MESSAGE_EVENT,
     CHAT_REPLY_EVENT,
-    FEEDBACK_EVENT,
+    EXPLANATION_REQUEST_EVENT,
+    EXPLANATION_RESPONSE_EVENT,
     ChatMessagePayload,
     ChatReplyPayload,
-    FeedbackPayload,
+    ExplanationRequestPayload,
+    ExplanationResponsePayload,
 )
 
 from agent_logic import (
@@ -33,49 +35,16 @@ from agent_logic import (
     _extract_facts_from_message,
     _generate_llm_reply,
     _get_conversation_history,
-    _explain_reasoning,
     feedback_manager,
 )
 
 worker = Worker(
     name="chat-agent",
     description="A chat agent with memory and LLM capabilities",
-    capabilities=["chat", "conversation", "memory", "feedback"],
-    events_consumed=[CHAT_MESSAGE_EVENT, FEEDBACK_EVENT],
-    events_produced=[CHAT_REPLY_EVENT],
+    capabilities=["chat", "conversation", "memory"],
+    events_consumed=[CHAT_MESSAGE_EVENT, EXPLANATION_RESPONSE_EVENT],
+    events_produced=[CHAT_REPLY_EVENT, EXPLANATION_REQUEST_EVENT],
 )
-
-
-@worker.on_event("chat.feedback", topic=EventTopic.BUSINESS_FACTS)
-async def handle_feedback(event: EventEnvelope, context: PlatformContext):
-    """Handle user feedback events."""
-    data = event.data or {}
-    
-    try:
-        feedback = FeedbackPayload(**data)
-    except Exception as e:
-        print(f"\n❌ Invalid feedback payload: {e}")
-        return
-    
-    print(f"\n📝 Received feedback")
-    print(f"   Message ID: {feedback.message_id}")
-    print(f"   Is Helpful: {feedback.is_helpful}")
-    
-    # Retrieve trace to see what knowledge was used
-    knowledge_used = []
-    trace = await feedback_manager.get_trace(context, feedback.message_id, feedback.user_id)
-    if trace:
-        knowledge_used = [k.get("content") for k in trace.get("knowledge_results", [])]
-    
-    await feedback_manager.log_feedback(
-        context,
-        feedback.message_id,
-        feedback.is_helpful,
-        feedback.user_id,
-        feedback.conversation_id,
-        knowledge_used
-    )
-    print("   ✓ Feedback logged")
 
 
 @worker.on_event("chat.message", topic=EventTopic.ACTION_REQUESTS)
@@ -115,111 +84,29 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
     )
     
     if is_explanation_request:
-        # Handle explanation request
-        print("   ❓ Explanation request detected")
+        # Delegate to feedback-worker via async choreography
+        print("   ❓ Explanation request detected - delegating to feedback-agent")
         
-        # 1. Retrieve conversation history for context (episodic memory)
-        print("   🔍 Retrieving conversation history...")
-        conversation_history = await _get_conversation_history(
-            context,
-            chat_message.message,
-            user_id,
-            limit=10,
-            relevant=False
+        request_payload = ExplanationRequestPayload(
+            message_id=chat_message.message_id,
+            conversation_id=chat_message.conversation_id,
+            user_id=user_id,
+            timestamp=datetime.now(timezone.utc).isoformat()
         )
-        if conversation_history:
-            print(f"   ✓ Found {len(conversation_history)} previous interactions")
-        else:
-            print(f"   ℹ️  No previous interactions found (new conversation)")
         
-        # Get the last assistant reply from conversation history
-        last_assistant_message = None
-        last_user_message = None
-        for interaction in reversed(conversation_history):
-            if interaction.get("role") == "assistant" and not last_assistant_message:
-                last_assistant_message = interaction
-            if interaction.get("role") == "user" and not last_user_message:
-                last_user_message = interaction
-            if last_assistant_message and last_user_message:
-                break
+        # Publish request to action-requests topic
+        # We use the SAME correlation_id so the response can be linked back
+        await context.bus.publish(
+            topic=EventTopic.ACTION_REQUESTS,
+            event_type="explanation.request",
+            data=request_payload.model_dump(),
+            correlation_id=event.correlation_id,
+            user_id=user_id
+        )
+        print(f"   📤 Published explanation.request (corr_id: {event.correlation_id[:8]}...)")
         
-        if last_assistant_message and last_user_message:
-            # Try to find trace data from stored traces
-            explanation = None
-            
-            # Try to get trace_id from the last assistant message metadata
-            try:
-                recent = await context.memory.get_recent_history(
-                    agent_id="chat-agent",
-                    user_id=user_id,
-                    limit=20
-                )
-                
-                # Find the last assistant message with metadata
-                for interaction in recent:
-                    metadata = interaction.get("metadata") or {}
-                    if (interaction.get("role") == "assistant" and 
-                        metadata.get("conversation_id") == chat_message.conversation_id):
-                        trace_id = metadata.get("trace_id")
-                        if trace_id:
-                            trace_data = await feedback_manager.get_trace(context, trace_id, user_id)
-                            if trace_data:
-                                # Generate explanation from stored trace
-                                explanation = await _explain_reasoning(
-                                    trace_id,
-                                    trace_data["conversation_history"],
-                                    trace_data["knowledge_results"],
-                                    trace_data["prompt_used"],
-                                    user_id
-                                )
-                                break
-            except Exception as e:
-                print(f"   ⚠️  Error retrieving trace: {e}")
-            
-            # If no trace found, reconstruct from conversation
-            if not explanation:
-                try:
-                    # Re-search semantic memory with the last user message
-                    prev_knowledge = await _search_semantic_memory(
-                        context,
-                        last_user_message.get("content", ""),
-                        user_id,
-                        limit=5
-                    )
-                    
-                    # Get conversation history up to that point
-                    prev_history = []
-                    for interaction in conversation_history:
-                        prev_history.append(interaction)
-                        if interaction.get("content") == last_user_message.get("content"):
-                            break
-                    
-                    # Generate explanation
-                    explanation = await _explain_reasoning(
-                        chat_message.message_id,
-                        prev_history,
-                        prev_knowledge,
-                        "LLM prompt combining episodic and semantic memory (RAG pattern)",
-                        user_id
-                    )
-                except Exception as e:
-                    explanation = f"I encountered an error generating the explanation: {e}"
-            
-            reply_text = explanation if explanation else "I don't have trace information for my previous response."
-        else:
-            reply_text = "I don't have a previous response to explain. Please ask me something first, then ask 'Why did you say that?'"
-        
-        # Skip normal processing for explanation requests
-        trace_metadata = {
-            "conversation_id": chat_message.conversation_id,
-            "in_response_to": chat_message.message_id,
-            "is_explanation": True,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        
-        # IMPORTANT: Generate a message ID for the explanation itself
-        # This allows the user to provide feedback on the explanation
-        reply_message_id = str(uuid.uuid4())
+        # We don't send a reply here. We'll wait for explanation.response.
+        return
     else:
         # Normal message processing with Weave tracing
         # 1. Log user message to episodic memory
@@ -480,6 +367,43 @@ async def startup():
 async def shutdown():
     """Called when the worker stops."""
     print("\n👋 Chat Agent shutting down\n")
+
+
+@worker.on_event("explanation.response", topic=EventTopic.ACTION_RESULTS)
+async def handle_explanation_response(event: EventEnvelope, context: PlatformContext):
+    """Handle the asynchronous explanation from feedback-agent and reply to user."""
+    data = event.data or {}
+    try:
+        response = ExplanationResponsePayload(**data)
+    except Exception as e:
+        print(f"\n❌ Invalid explanation response: {e}")
+        return
+
+    print(f"\n💡 Received explanation response")
+    print(f"   Original message ID: {response.message_id}")
+    
+    # Send normal chat reply back to user. 
+    # Use context.bus.respond to automatically match the original correlation ID.
+    reply_id = str(uuid.uuid4())
+    reply_payload = ChatReplyPayload(
+        user_id=response.user_id,
+        in_response_to=response.message_id,
+        reply=response.explanation,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        message_id=reply_id,
+        conversation_id=response.conversation_id
+    )
+    
+    # IMPORTANT: Since this responds to the explanation.response,
+    # it carries back the ORIGINAL correlation ID from the user's message.
+    await context.bus.respond(
+        event_type="chat.reply",
+        correlation_id=event.correlation_id,
+        user_id=event.user_id,
+        tenant_id=event.tenant_id,
+        data=reply_payload.model_dump()
+    )
+    print(f"   ✓ Sent chat.reply with explanation (corr_id: {event.correlation_id[:8]}...)")
 
 
 if __name__ == "__main__":

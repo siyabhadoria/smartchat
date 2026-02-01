@@ -77,6 +77,40 @@ FEEDBACK_EVENT = EventDefinition(
 )
 
 
+class ExplanationRequestPayload(BaseModel):
+    """Payload for explanation.request events."""
+    message_id: str = Field(..., description="ID of the message to explain")
+    conversation_id: str = Field(..., description="ID of the conversation thread")
+    user_id: str = Field(..., description="ID of the user requesting explanation")
+    timestamp: str = Field(..., description="ISO 8601 timestamp")
+
+
+class ExplanationResponsePayload(BaseModel):
+    """Payload for explanation.response events."""
+    explanation: str = Field(..., description="Explanation of the agent's reasoning")
+    message_id: str = Field(..., description="ID of the original message being explained")
+    conversation_id: str = Field(..., description="ID of the conversation thread")
+    user_id: str = Field(..., description="ID of the user")
+    timestamp: str = Field(..., description="ISO 8601 timestamp")
+
+
+# Explanation request event (from chat-agent to feedback-agent)
+EXPLANATION_REQUEST_EVENT = EventDefinition(
+    event_name="explanation.request",
+    topic=EventTopic.ACTION_REQUESTS.value,
+    description="Request explanation of the agent's reasoning for a previous response",
+    payload_schema=ExplanationRequestPayload.model_json_schema(),
+)
+
+# Explanation response event (from feedback-agent back to chat-agent)
+EXPLANATION_RESPONSE_EVENT = EventDefinition(
+    event_name="explanation.response",
+    topic=EventTopic.ACTION_RESULTS.value,
+    description="Explanation of the agent's reasoning",
+    payload_schema=ExplanationResponsePayload.model_json_schema(),
+)
+
+
 if __name__ == "__main__":
     """Print event definitions for review."""
     print("=" * 70)
