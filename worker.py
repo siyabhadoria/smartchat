@@ -88,8 +88,7 @@ async def _search_semantic_memory(
 ) -> List[Dict]:
     """
     Search semantic memory for relevant knowledge.
-    Wrapped with Weave for tracing.
-    
+
     Args:
         context: Platform context
         query: Search query
@@ -472,16 +471,16 @@ Your response:"""
 
 async def _get_conversation_history(
     context: PlatformContext,
-    conversation_id: str,
+    query: str,  # The current message content to search against
     user_id: str,
     limit: int = 10
 ) -> List[Dict]:
     """
-    Retrieve conversation history from episodic memory.
+    Retrieve relevant conversation history using semantic search.
     
     Args:
         context: Platform context
-        conversation_id: Conversation identifier
+        query: Current message content to find relevant history for
         user_id: User ID
         limit: Maximum number of interactions to retrieve
     
@@ -489,50 +488,49 @@ async def _get_conversation_history(
         List of interaction dicts with role and content
     """
     try:
-        # Get recent history for this agent and user (get more to account for filtering)
-        recent = await context.memory.get_recent_history(
+        # Use semantic search to find relevant past interactions instead of just recent ones
+        print(f"   Searching interaction history for: '{query[:50]}...'")
+        results = await context.memory.search_interactions(
             agent_id="chat-agent",
+            query=query,
             user_id=user_id,
-            limit=100  # Get more to ensure we find all interactions for this conversation
+            limit=limit
         )
         
-        # Filter by conversation_id from metadata
         conversation_history = []
-        for interaction in recent:
-            # Handle metadata - it might be None, empty dict, or a dict
-            metadata = interaction.get("metadata")
-            if metadata is None:
-                metadata = {}
-            elif not isinstance(metadata, dict):
-                metadata = {}
+        for interaction in results:
+            # search_interactions returns EpisodicMemoryResponse objects
+            # which have 'role', 'content', 'created_at' and 'score' fields
             
-            # Debug: Print first few interactions to see structure
-            if len(conversation_history) == 0 and len(recent) > 0:
-                print(f"   🔍 Debug: Checking {len(recent)} recent interactions")
-                print(f"      Sample metadata type: {type(metadata)}, value: {metadata}")
-                print(f"      Looking for conversation_id: {conversation_id}")
+            # Use dot notation for Pydantic models (EpisodicMemoryResponse)
+            role = interaction.role if hasattr(interaction, 'role') else interaction.get("role")
+            content = interaction.content if hasattr(interaction, 'content') else interaction.get("content", "")
+            timestamp = interaction.created_at if hasattr(interaction, 'created_at') else interaction.get("created_at")
+            score = interaction.score if hasattr(interaction, 'score') else interaction.get("score", 0)
             
-            # Check if this interaction belongs to our conversation
-            if metadata.get("conversation_id") == conversation_id:
-                conversation_history.append({
-                    "role": interaction.get("role"),
-                    "content": interaction.get("content", ""),
-                    "timestamp": interaction.get("created_at") or interaction.get("timestamp")
-                })
-        
-        # Results are already in reverse chronological order (newest first)
-        # Reverse to get chronological order (oldest first) for context
-        conversation_history.reverse()
+            conversation_history.append({
+                "role": role,
+                "content": content,
+                "timestamp": timestamp,
+                "score": score
+            })
+            
+        # Results are ordered by relevance (score), not time
+        # We might want to re-order them chronologically for the LLM context if that makes sense,
+        # but for now let's keep them as retrieved (most relevant first) or reverse for context window style?
+        # Usually for RAG, the order depends on how we present it. 
+        # Let's keep relevance order but maybe logging them helps.
         
         # Debug: Print what we found
         if conversation_history:
-            print(f"   📝 Retrieved {len(conversation_history)} interactions for conversation")
-            for i, h in enumerate(conversation_history[-3:], 1):  # Show last 3
+            print(f"   📝 Found {len(conversation_history)} relevant interactions")
+            for i, h in enumerate(conversation_history[:3], 1):  # Show top 3
                 role = h.get("role", "unknown")
                 content_preview = h.get("content", "")[:50]
-                print(f"      {i}. {role}: {content_preview}...")
+                score = h.get("score", 0)
+                print(f"      {i}. [{score:.2f}] {role}: {content_preview}...")
         
-        return conversation_history[:limit]
+        return conversation_history
         
     except Exception as e:
         print(f"   ⚠️  Error retrieving history: {e}")
@@ -620,7 +618,7 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
     print("   🔍 Retrieving conversation history...")
     conversation_history = await _get_conversation_history(
         context,
-        chat_message.conversation_id,
+        chat_message.message,
         user_id,
         limit=10
     )
