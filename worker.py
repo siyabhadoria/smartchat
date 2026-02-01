@@ -32,7 +32,6 @@ from agent_logic import (
     _format_conversation_history,
     _format_knowledge_context,
     _search_semantic_memory,
-    _extract_facts_from_message,
     _generate_llm_reply,
     _get_conversation_history,
     feedback_manager,
@@ -177,39 +176,7 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
         # Format knowledge context
         knowledge_context = _format_knowledge_context(knowledge_results)
         
-        # 4. Extract facts from user message and store in semantic memory
-        print("   🧠 Extracting facts from message...")
-        extracted_facts = []
-        try:
-            extracted_facts = await _extract_facts_from_message(
-                chat_message.message,
-                # conversation_history (removed to avoid duplicate facts)
-                [] 
-            )
-            if extracted_facts:
-                print(f"   ✓ Extracted {len(extracted_facts)} facts")
-                # Store each fact in semantic memory
-                for fact in extracted_facts:
-                    try:
-                        await context.memory.store_knowledge(
-                            content=fact,
-                            user_id=user_id,
-                            metadata={
-                                "conversation_id": chat_message.conversation_id,
-                                "message_id": chat_message.message_id,
-                                "source": "user_message",
-                                "timestamp": chat_message.timestamp
-                            }
-                        )
-                        print(f"      💾 Stored: {fact[:60]}...")
-                    except Exception as e:
-                        print(f"      ⚠️  Error storing fact: {e}")
-            else:
-                print(f"   ℹ️  No facts to extract")
-        except Exception as e:
-            print(f"   ⚠️  Error extracting facts: {e}")
-        
-        # 5. Generate intelligent reply using LLM with both episodic and semantic memory (RAG)
+        # 4. Generate intelligent reply using LLM with both episodic and semantic memory (RAG)
         # Build prompt for trace storage
         history_context = _format_conversation_history(conversation_history)
         prompt_used = f"""You are a helpful, friendly chat assistant. You have access to:

@@ -7,7 +7,7 @@ Events are automatically registered by the SDK when agents start.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from pydantic import BaseModel, Field
 from soorma_common import EventDefinition
 from soorma_common.events import EventTopic
@@ -108,6 +108,23 @@ EXPLANATION_RESPONSE_EVENT = EventDefinition(
     topic=EventTopic.ACTION_RESULTS.value,
     description="Explanation of the agent's reasoning",
     payload_schema=ExplanationResponsePayload.model_json_schema(),
+)
+
+
+class KnowledgeInjectionPayload(BaseModel):
+    """Payload for knowledge.inject events."""
+    content: str = Field(..., description="The fact or knowledge content to inject")
+    user_id: str = Field(..., description="ID of the user this knowledge belongs to")
+    metadata: Optional[Dict] = Field(None, description="Optional metadata for the knowledge")
+    timestamp: str = Field(..., description="ISO 8601 timestamp")
+
+
+# Knowledge injection event (manual/external knowledge ingestion)
+KNOWLEDGE_INJECTION_EVENT = EventDefinition(
+    event_name="knowledge.inject",
+    topic=EventTopic.BUSINESS_FACTS.value,
+    description="Inject a specific fact or piece of knowledge into semantic memory",
+    payload_schema=KnowledgeInjectionPayload.model_json_schema(),
 )
 
 
