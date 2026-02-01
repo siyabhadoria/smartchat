@@ -1,3 +1,4 @@
+from soorma.context import PlatformContext
 import os
 import uuid
 import hashlib
@@ -129,7 +130,6 @@ def _format_knowledge_context(knowledge_results: List[Dict]) -> str:
         formatted.append(f"[Knowledge {i}] {content}")
     return "\n\n".join(formatted)
 
-@weave.op()
 async def _search_semantic_memory(context, query: str, user_id: str, limit: int = 5) -> List[Dict]:
     try:
         return await context.memory.search_knowledge(query=query, user_id=user_id, limit=limit)
@@ -173,22 +173,53 @@ Response:"""
     except Exception:
         return "I'm having trouble processing that."
 
-@weave.op()
-async def _get_conversation_history(context, conversation_id: str, user_id: str, limit: int = 10) -> List[Dict]:
+async def _get_conversation_history(
+    context: PlatformContext, 
+    query: str, 
+    user_id: str, 
+    limit: int = 10,
+    relevant: bool = True
+) -> List[Dict]:
+    """
+    Retrieve relevant conversation history using semantic search.
+    """
     try:
-        recent = await context.memory.get_recent_history(agent_id="chat-agent", user_id=user_id, limit=100)
-        history = []
-        for interaction in recent:
-            metadata = interaction.get("metadata") or {}
-            if metadata.get("conversation_id") == conversation_id:
-                history.append({
-                    "role": interaction.get("role"),
-                    "content": interaction.get("content", ""),
-                    "timestamp": interaction.get("created_at") or interaction.get("timestamp")
-                })
-        history.reverse()
-        return history[:limit]
-    except Exception:
+        if relevant:
+            # Use semantic search to find relevant past interactions instead of just recent ones
+            print(f"   Searching interaction history for: '{query[:50]}...'")
+            results = await context.memory.search_interactions(
+                agent_id="chat-agent",
+                query=query,
+                user_id=user_id,
+                limit=limit
+            )
+        else:
+            # Use recent interactions instead of semantic search
+            print(f"   Getting recent interaction history for: '{query[:50]}...")
+            results = await context.memory.get_recent_history(
+                agent_id="chat-agent",
+                user_id=user_id,
+                limit=limit
+            )
+        
+        conversation_history = []
+        for interaction in results:
+            # Use dot notation for Pydantic models (EpisodicMemoryResponse)
+            role = interaction.role if hasattr(interaction, 'role') else interaction.get("role")
+            content = interaction.content if hasattr(interaction, 'content') else interaction.get("content", "")
+            timestamp = interaction.created_at if hasattr(interaction, 'created_at') else interaction.get("created_at")
+            score = interaction.score if hasattr(interaction, 'score') else interaction.get("score", 0)
+            
+            conversation_history.append({
+                "role": role,
+                "content": content,
+                "timestamp": timestamp,
+                "score": score
+            })
+            
+        return conversation_history
+    except Exception as e:
+        print(f"   ⚠️  Error retrieving history: {e}")
         return []
 
 async def _explain_reasoning(

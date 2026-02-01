@@ -90,39 +90,6 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
     print(f"   Message ID: {chat_message.message_id}")
     print(f"   Message length: {len(chat_message.message)} chars")
     
-    # 1. Log user message to episodic memory
-    print("   💾 Storing message in episodic memory...")
-    try:
-        await context.memory.log_interaction(
-            agent_id="chat-agent",
-            role="user",
-            content=chat_message.message,
-            user_id=user_id,
-            metadata={
-                "conversation_id": chat_message.conversation_id,
-                "message_id": chat_message.message_id,
-                "timestamp": chat_message.timestamp
-            }
-        )
-        print(f"   ✓ Message stored (conversation_id: {chat_message.conversation_id})")
-    except Exception as e:
-        print(f"   ⚠️  Error storing message: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    # 2. Retrieve conversation history for context (episodic memory)
-    print("   🔍 Retrieving conversation history...")
-    conversation_history = await _get_conversation_history(
-        context,
-        chat_message.message,
-        user_id,
-        limit=10
-    )
-    if conversation_history:
-        print(f"   ✓ Found {len(conversation_history)} previous interactions")
-    else:
-        print(f"   ℹ️  No previous interactions found (new conversation)")
-    
     # Check if this is an explanation request
     is_explanation_request = (
         chat_message.message.lower().strip() in [
@@ -137,6 +104,20 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
     if is_explanation_request:
         # Handle explanation request
         print("   ❓ Explanation request detected")
+        
+        # 1. Retrieve conversation history for context (episodic memory)
+        print("   🔍 Retrieving conversation history...")
+        conversation_history = await _get_conversation_history(
+            context,
+            chat_message.message,
+            user_id,
+            limit=10,
+            relevant=False
+        )
+        if conversation_history:
+            print(f"   ✓ Found {len(conversation_history)} previous interactions")
+        else:
+            print(f"   ℹ️  No previous interactions found (new conversation)")
         
         # Get the last assistant reply from conversation history
         last_assistant_message = None
@@ -227,6 +208,38 @@ async def handle_chat_message(event: EventEnvelope, context: PlatformContext):
         reply_message_id = str(uuid.uuid4())
     else:
         # Normal message processing with Weave tracing
+        # 1. Log user message to episodic memory
+        print("   💾 Storing message in episodic memory...")
+        try:
+            await context.memory.log_interaction(
+                agent_id="chat-agent",
+                role="user",
+                content=chat_message.message,
+                user_id=user_id,
+                metadata={
+                    "conversation_id": chat_message.conversation_id,
+                    "message_id": chat_message.message_id,
+                    "timestamp": chat_message.timestamp
+                }
+            )
+            print(f"   ✓ Message stored (conversation_id: {chat_message.conversation_id})")
+        except Exception as e:
+            print(f"   ⚠️  Error storing message: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # 2. Retrieve conversation history for context (episodic memory)
+        print("   🔍 Retrieving conversation history...")
+        conversation_history = await _get_conversation_history(
+            context,
+            chat_message.message,
+            user_id,
+            limit=10
+        )
+        if conversation_history:
+            print(f"   ✓ Found {len(conversation_history)} previous interactions")
+        else:
+            print(f"   ℹ️  No previous interactions found (new conversation)")
         
         # 3. Search semantic memory for relevant knowledge (RAG pattern) - with Weave tracing
         print("   📚 Searching semantic memory for relevant knowledge...")
