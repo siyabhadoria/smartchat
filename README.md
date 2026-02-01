@@ -1,23 +1,26 @@
 # 🚀 SmartChat: Cognitive Memory Agent
 
-SmartChat is a sophisticated AI agent built on the **CoALA (Cognitive Architectures for LLM Agents)** framework. Unlike stateless bots, it implements a triple-memory system and a continuous self-improvement loop that learns directly from user feedback.
+SmartChat is a sophisticated, multi-agent AI system built on the **CoALA (Cognitive Architectures for LLM Agents)** framework. Unlike stateless bots, it implements a decentralized cognitive architecture where specialized agents handle conversation, learning, and self-improvement in parallel.
 
 ---
 
-### 🧠 The Core Framework: Triple-Memory System
-To achieve human-like cognition, SmartChat uses three distinct memory layers:
-*   **1. Episodic Memory (History)**: A time-ordered log of past conversations. It helps the agent remember the "flow" of what has been discussed.
-*   **2. Semantic Memory (Knowledge)**: A vector-searchable database of extracted facts (e.g., "User hates spicy food"). It retrieves these via RAG to ground responses in truth.
-*   **3. Working Memory (Active State)**: Stores live reasoning traces and real-time feedback penalties. This powers the "Why did you say that?" feature.
+## 🏛️ Multi-Agent Cognitive Architecture
+
+SmartChat is composed of three specialized background agents that collaborate via an event-driven choreography:
+
+| Agent | Responsibility | Core Logic |
+| :--- | :--- | :--- |
+| **Chat Agent** | **Execution & Action** | Handles user chat, intent detection, and response generation. |
+| **Knowledge Agent** | **Self-Learning** | Extracts facts in the background and processes knowledge injections. |
+| **Feedback Agent** | **Self-Improvement** | Explains reasoning and applies penalties based on user feedback. |
 
 ---
 
-### 🔄 The Self-Improvement Loop
-SmartChat evolves its behavior based on your feedback:
-1. **User Feedback**: Click **Thumbs Up/Down (👍/👎)** on any response.
-2. **Score Penalization**: Negative feedback triggers an update in **Working Memory** that applies a penalty to the facts used for that answer.
-3. **Episodic Injection**: A correction is injected into the conversation history, ensuring the LLM sees the rejection in context.
-4. **Learning**: The agent instantly prioritizes corrected information in the next turn.
+### 🧠 Triple-Memory System
+To achieve human-like cognition, the system uses three distinct memory layers shared across agents:
+*   **1. Episodic Memory (History)**: A time-ordered log of past conversations.
+*   **2. Semantic Memory (Knowledge)**: A vector-searchable database of extracted facts.
+*   **3. Working Memory (Active State)**: Stores live reasoning traces and feedback scores.
 
 ---
 
@@ -30,11 +33,11 @@ SmartChat evolves its behavior based on your feedback:
 ✅ **Weave Tracing** - Deep observability with Weights & Biases Weave  
 
 ## The Cognitive Pattern
-1. **Perception** - Takes in structured text or voice events.
-2. **Cognition** - Retrieves history (Episodic) and relevant knowledge (Semantic).
-3. **Reasoning** - Composes a grounded prompt, storing the "trace" in Working Memory.
-4. **Learning** - Extracts new facts and updates scores based on feedback.
-5. **Action** - Responds via text or voice.
+1. **Perception** - **Chat Agent** takes in structured context/events.
+2. **Cognition** - **Chat Agent** retrieves history (Episodic) and relevant knowledge (Semantic).
+3. **Reasoning** - **Chat Agent** generates grounded prompt and stores "trace" in Working Memory.
+4. **Learning** - **Knowledge Agent** extracts facts from messages in the background.
+5. **Action** - **Chat Agent** responds to user; **Feedback Agent** manages explanations.
 
 ## Code Walkthrough
 
@@ -246,28 +249,19 @@ If you prefer to run components separately:
 
 **After starting platform services above...**
 
-**Terminal 2: Start the Worker Agent**
+**Terminal 2: Start the Agents**
+
+Run the start script to launch all three cognitive workers:
 
 ```bash
 cd chat-memory-agent
-python worker.py
+sh start.sh
 ```
 
-You should see:
-```
-🚀 Chat Agent with Memory & LLM started!
-   Name: chat-agent
-   Capabilities: ['chat', 'conversation', 'memory']
-   
-   Features:
-   • Episodic memory (conversation history)
-   • LLM-powered intelligent replies
-   • Multi-turn conversation context
-   
-   Listening for 'chat.message' events on topic 'business-facts'...
-   Publishing 'chat.reply' events on topic 'action-results'...
-   ✓ LLM configured: gpt-4o-mini
-```
+You should see all agents starting:
+- **Chat Agent**: Waiting for `chat.message`
+- **Feedback Agent**: Waiting for `explanation.request`
+- **Knowledge Agent**: Waiting for `chat.message` and `knowledge.inject`
 
 **Terminal 3: Send Messages**
 
@@ -275,41 +269,26 @@ You should see:
 python client.py "Hello, how are you?"
 ```
 
-Expected output:
+Expected output (from Chat + Knowledge agents):
 ```
-📨 Received chat message
-   User ID: 00000000-0000-0000-0000-000000000001
-   Conversation ID: abc-123-def
-   Message ID: xyz-456-uvw
-   Message length: 19 chars
-   💾 Storing message in episodic memory...
-   ✓ Message stored
+📨 [Chat Agent] Received chat message
    🔍 Retrieving conversation history...
-   ✓ Found 0 previous interactions
-   📚 Searching semantic memory for relevant knowledge...
-   ℹ️  No relevant knowledge found
-   🧠 Extracting facts from message...
-   ✓ Extracted 1 facts
-      💾 Stored: User's name is Alice...
    🤖 Generating reply with LLM (RAG)...
-   ✓ Reply generated (45 chars)
-   💾 Storing reply in episodic memory...
-   ✓ Reply stored
    ✅ Reply published
+
+🧠 [Knowledge Agent] Extracting facts...
+   ✓ Extracted 1 facts
+   💾 Stored in semantic memory: User's name is Alice...
 ```
 
 
-### How It Works (Cognitive Cycle)
+### How It Works (Decoupled Cognitive Cycle)
 
-1. **User sends message** → Stored in episodic memory with role="user"
-2. **Agent extracts facts** → LLM identifies factual information to remember
-3. **Facts stored** → Each fact stored in semantic memory
-4. **Agent retrieves context**:
-   - Episodic: Recent conversation history
-   - Semantic: Relevant stored knowledge (via vector search)
-5. **LLM generates reply** → Uses both memory types (RAG pattern)
-6. **Agent sends reply** → Stored in episodic memory with role="assistant"
-7. **Next message** → Agent has both conversation context AND stored knowledge
+1. **User sends message** → Chat Agent stores in episodic memory.
+2. **Chat Agent retrieves context** → Pulls history + relevant semantic facts.
+3. **Chat Agent generates reply** → Uses both memory types (RAG) and stores trace.
+4. **Knowledge Agent extracts facts** → (Async) Analyzes the same message to update semantic memory.
+5. **Feedback Agent applies learning** → (Async) If user clicks 👍/👎, it updates fact scores.
 
 ## Key Takeaways
 

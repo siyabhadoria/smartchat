@@ -73,10 +73,12 @@ soorma dev --build
 
 **Leave this running!**
 
-### Terminal 2: Start the Chat Agent (Worker)
+### Terminal 2: Start the Agents (Worker Orchestration)
+
+Launch the core cognitive loop (Chat, Knowledge, and Feedback agents):
 
 ```bash
-cd chat-memory-agent
+cd smartchat
 sh start.sh
 ```
 
@@ -89,21 +91,10 @@ sh start_web.sh
 
 Access the UI at: `http://localhost:5000`
 
-You should see:
-```
-🚀 Chat Agent with Memory & LLM started!
-   Name: chat-agent
-   Capabilities: ['chat', 'conversation', 'memory']
-   
-   Features:
-   • Episodic memory (conversation history)
-   • LLM-powered intelligent replies
-   • Multi-turn conversation context
-   
-   Listening for 'chat.message' events on topic 'business-facts'...
-   Publishing 'chat.reply' events on topic 'action-results'...
-   ✓ LLM configured: gpt-4o-mini
-```
+You should see all workers starting:
+- **Chat Agent**: Handles primary dialogue
+- **Knowledge Agent**: Handles background learning
+- **Feedback Agent**: Handles reasoning explanations
 
 **Leave this running!**
 
@@ -195,22 +186,21 @@ You'll get simple fallback responses instead of LLM-generated ones.
 
 ### In Worker Terminal (Terminal 2)
 
-When a message arrives, you should see:
+When a message arrives, you should see parallel activity:
+
+**In Chat Agent logs:**
 ```
 📨 Received chat message
-   User ID: user-001
-   Conversation ID: abc-123...
-   Message ID: xyz-456...
-   Message length: 25 chars
-   💾 Storing message in episodic memory...
-   ✓ Message stored
    🔍 Retrieving conversation history...
-   ✓ Found 2 previous interactions
    🤖 Generating reply with LLM...
-   ✓ Reply generated (87 chars)
-   💾 Storing reply in episodic memory...
-   ✓ Reply stored
    ✅ Reply published
+```
+
+**In Knowledge Agent logs:**
+```
+🧠 Extracting facts from user message...
+   ✓ Extracted 1 facts
+   💾 Stored: "User is a software engineer"
 ```
 
 ### In Client Terminal (Terminal 3)

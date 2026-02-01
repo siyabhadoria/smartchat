@@ -45,6 +45,10 @@ python3 "$PROJECT_DIR/feedback_worker.py" &
 FEEDBACK_PID=$!
 PIDS+=($FEEDBACK_PID)
 
+python3 "$PROJECT_DIR/knowledge_worker.py" &
+KNOWLEDGE_PID=$!
+PIDS+=($KNOWLEDGE_PID)
+
 # Conditional Start: Voice Agent (Pipecat)
 if [ -n "$DAILY_ROOM_URL" ]; then
     echo ""
@@ -68,6 +72,7 @@ echo "======================================================================"
 echo "  ✓ Agents Running"
 echo "  - Text Agent PID: $WORKER_PID"
 echo "  - Feedback Agent PID: $FEEDBACK_PID"
+echo "  - Knowledge Agent PID: $KNOWLEDGE_PID"
 [ -n "$VOICE_PID" ] && echo "  - Voice Agent PID: $VOICE_PID"
 echo "======================================================================"
 echo ""
